@@ -356,3 +356,19 @@ if [[ "$ANDROID_VERSION" == "android16" && "$KERNEL_VERSION" == "6.12" ]]; then
     echo "已修复 setuid_hook.c 重复定义问题"
   fi
 fi
+
+# 禁用 KSU preinit：SUSFS 的 preinit 补丁是针对更新版 KSU API 生成的，
+# 与当前 KSU 版本拼合后虽可编译，但运行期会通过 runner 拦截 init 的 execve，
+# 一旦失败整机黑屏（无 init、无 adb、无显示）。
+# 将 ksu_preinit_enabled 默认值改为 false，初始化直接返回，ksu_preinit_file
+# 保持 NULL，execve 钩子即自动跳过，不再干预启动流程。
+if [ "$KERNEL_VERSION" = "5.10" ]; then
+  PREINIT_P="$KERNEL_ROOT/common/drivers/kernelsu/preinit/preinit.c"
+  if [ -f "$PREINIT_P" ]; then
+    sed -i 's/static bool ksu_preinit_enabled = true;/static bool ksu_preinit_enabled = false;/' "$PREINIT_P"
+    echo "已禁用 preinit:"
+    grep -n "ksu_preinit_enabled =" "$PREINIT_P" || true
+  else
+    echo "警告: $PREINIT_P 不存在，跳过 preinit 禁用"
+  fi
+fi
