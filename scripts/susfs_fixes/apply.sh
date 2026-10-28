@@ -56,12 +56,13 @@ if [ "$KERNEL_VERSION" = "5.10" ]; then
 # 在 2 核 runner 上链接 vmlinux.o 超过 20 分钟，会顶穿编译步骤 30 分钟超时，
 # 重试也无法在 60 分钟 job 超时内完成（run 40629518438 实测：编译 11 分钟后
 # 在 LTO 阶段被 runner 关闭信号杀死）。
-# 切换为 LTO_NONE（GKI 标准配置，不影响 KMI 与厂商模块加载），构建时间约降至 1/3。
+# 改用 ThinLTO：与社区成品内核一致（真机验证可启动），构建约 15 分钟；
+# 同时保持 CFI 生效（厂商驱动模块为 CFI 编译，内核缺 CFI 会导致其调用陷阱）。
 if [ "$KERNEL_VERSION" = "5.10" ]; then
   DEFCFG="$KERNEL_ROOT/common/arch/arm64/configs/gki_defconfig"
   if [ -f "$DEFCFG" ]; then
-    sed -i '/^CONFIG_LTO_CLANG_FULL=y/d; /^CONFIG_LTO_CLANG_THIN=y/d; /^# CONFIG_LTO_NONE is not set/d; /^CONFIG_LTO_NONE=y/d' "$DEFCFG"
-    echo 'CONFIG_LTO_NONE=y' >> "$DEFCFG"
+    sed -i '/^CONFIG_LTO_CLANG_FULL=y/d; /^CONFIG_LTO_CLANG_THIN=y/d; /^# CONFIG_LTO_NONE is not set/d; /^CONFIG_LTO_NONE=y/d; /^# CONFIG_LTO_CLANG_FULL is not set/d; /^# CONFIG_LTO_CLANG_THIN is not set/d' "$DEFCFG"
+    echo 'CONFIG_LTO_CLANG_THIN=y' >> "$DEFCFG"
     echo "已切换 $DEFCFG 为 LTO_NONE:"
     grep -E '^(# )?CONFIG_LTO' "$DEFCFG" || true
   else
