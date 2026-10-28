@@ -42,6 +42,20 @@ case "$KSU_VARIANT" in
     ;;
 esac
 
+
+# 修复 SUSFS KernelSU 补丁引入的 preinit.c close_fd 5.10 编译错误：
+# 补丁会把 preinit.c 中的 ksu_close_fd(fd)（KernelSU 兼容宏，内部为
+# ksyscall(close, fd)）改写为 5.11+ 才有的 close_fd(fd)，5.10 下报
+# implicit declaration of function 'close_fd'。这里还原为兼容宏。
+if [ "$KERNEL_VERSION" = "5.10" ]; then
+  PREINIT_C="common/drivers/kernelsu/preinit/preinit.c"
+  if [ -f "$PREINIT_C" ] && grep -qE '^[[:space:]]*close_fd\(fd\);' "$PREINIT_C"; then
+    sed -i -E 's/^([[:space:]]*)close_fd\(fd\);/\1ksu_close_fd(fd);/' "$PREINIT_C"
+    echo "已修复 $PREINIT_C: close_fd(fd) -> ksu_close_fd(fd)"
+  else
+    echo "$PREINIT_C 中未发现裸 close_fd(fd); 调用，无需修复"
+  fi
+fi
 cd "$KERNEL_ROOT/common"
 CURRENT_SUB="$SUB_LEVEL"
 if [[ ! "$CURRENT_SUB" =~ ^[0-9]+$ ]]; then
