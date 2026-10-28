@@ -51,6 +51,23 @@ if [ "$KERNEL_VERSION" = "5.10" ]; then
   PREINIT_C="common/drivers/kernelsu/preinit/preinit.c"
   if [ -f "$PREINIT_C" ] && grep -qE '^[[:space:]]*close_fd\(fd\);' "$PREINIT_C"; then
     sed -i -E 's/^([[:space:]]*)close_fd\(fd\);/\1ksu_close_fd(fd);/' "$PREINIT_C"
+
+# GKI 5.10 分支默认 CONFIG_LTO_CLANG_FULL=y（与官方预编译一致），但全量 LTO
+# 在 2 核 runner 上链接 vmlinux.o 超过 20 分钟，会顶穿编译步骤 30 分钟超时，
+# 重试也无法在 60 分钟 job 超时内完成（run 40629518438 实测：编译 11 分钟后
+# 在 LTO 阶段被 runner 关闭信号杀死）。
+# 切换为 LTO_NONE（GKI 标准配置，不影响 KMI 与厂商模块加载），构建时间约降至 1/3。
+if [ "$KERNEL_VERSION" = "5.10" ]; then
+  DEFCFG="$KERNEL_ROOT/common/arch/arm64/configs/gki_defconfig"
+  if [ -f "$DEFCFG" ]; then
+    sed -i '/^CONFIG_LTO_CLANG_FULL=y/d; /^CONFIG_LTO_CLANG_THIN=y/d; /^# CONFIG_LTO_NONE is not set/d; /^CONFIG_LTO_NONE=y/d' "$DEFCFG"
+    echo 'CONFIG_LTO_NONE=y' >> "$DEFCFG"
+    echo "已切换 $DEFCFG 为 LTO_NONE:"
+    grep -E '^(# )?CONFIG_LTO' "$DEFCFG" || true
+  else
+    echo "警告: $DEFCFG 不存在，跳过 LTO 切换"
+  fi
+fi
     echo "已修复 $PREINIT_C: close_fd(fd) -> ksu_close_fd(fd)"
   else
     echo "$PREINIT_C 中未发现裸 close_fd(fd); 调用，无需修复"
